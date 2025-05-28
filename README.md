@@ -24,7 +24,7 @@ El repositorio está organizado de la siguiente manera:
 ```plaintext
 Modelado-Estadistico/
 │
-├── TP1/
+├── Regresion Ordinal/
 │   ├── datos/
 │   ├── informe.Rmd
 │   └── informe.pdf
