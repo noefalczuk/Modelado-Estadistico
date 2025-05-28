@@ -16,21 +16,20 @@ El segundo trabajo aborda:
 - Regresion con Splines
 - Introduccion a Causalidad
 
+Los proyectos fueron desarrollados en **R**. 
+
 ## 📁 Estructura del repositorio
 
 El repositorio está organizado de la siguiente manera:
-'''
+```plaintext
 Modelado-Estadistico/
 │
-├── TP1/ # Trabajo Práctico 1
-│ ├── datos/ # Archivos de datos utilizados
-│ ├── informe.Rmd # Informe en formato R Markdown
-│ └── informe.pdf # Informe exportado en PDF
+├── TP1/
+│   ├── datos/
+│   ├── informe.Rmd
+│   └── informe.pdf
 │
-├── TP2/ # Trabajo Práctico 2
-  ├── datos/ # Archivos de datos utilizados
-  ├── informe.Rmd # Informe en formato R Markdown
-  └── informe.pdf # Informe exportado en PDF
-'''
-
-Los proyectos fueron desarrollados en **R**. 
+└── TP2/
+    ├── datos/
+    ├── informe.Rmd
+    └── informe.pdf
