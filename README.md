@@ -19,7 +19,7 @@ El segundo trabajo aborda:
 ## 📁 Estructura del repositorio
 
 El repositorio está organizado de la siguiente manera:
-
+'''
 Modelado-Estadistico/
 │
 ├── TP1/ # Trabajo Práctico 1
@@ -31,6 +31,6 @@ Modelado-Estadistico/
   ├── datos/ # Archivos de datos utilizados
   ├── informe.Rmd # Informe en formato R Markdown
   └── informe.pdf # Informe exportado en PDF
-
+'''
 
 Los proyectos fueron desarrollados en **R**. 
