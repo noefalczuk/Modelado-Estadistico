@@ -4,12 +4,18 @@ Repositorio de trabajos prácticos de la materia **Modelado Estadístico** (Lice
 
 Este repositorio contiene proyectos desarrollados a lo largo del curso, aplicando técnicas estadísticas para analizar datos reales y construir modelos que expliquen o predigan comportamientos observables.
 
+- - Modelos Bayesianos
+- Modelo Lineal Generalizado
+- Analisis de Supervivencia
+- Modelos Lineales Mixtos
+- Regresion con Splines
+- Introduccion a Causalidad
+
 ## 📁 Temas abordados 
 
 El primer trabajo aborda: 
 - Modelos Bayesianos
 - Modelo Lineal Generalizado
-- Analisis de Supervivencia
 
 El segundo trabajo aborda: 
 - Modelos Lineales Mixtos
