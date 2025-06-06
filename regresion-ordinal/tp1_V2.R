@@ -1,0 +1,306 @@
+library(tidyverse)
+library(MASS)
+library(caret)
+library(purrr)
+library(broom)
+library(rstanarm)
+library(bayesplot)
+
+set.seed(123)
+datos <- read_delim("data.csv", delim = "\t")
+
+questions_cols_names <- paste0("Q", 1:44)
+niveles <- 1:5
+max_age <- 100
+
+datos <- datos |> 
+  mutate(across(all_of(questions_cols_names), ~ factor(.x, levels = niveles, ordered = TRUE))) |> 
+  mutate(age = as.numeric(age)) |> 
+  filter(!is.na(age), age <= max_age)
+
+# Visualización exploratoria básica
+
+datos %>%
+  ggplot(aes(x = age)) +
+  geom_histogram(bins = 30) +
+  labs(title = "Distribución de edad", x = "Edad", y = "Frecuencia") %>% 
+  print()
+
+# Ejercicio 1
+# Q12: "I use lotion on my hands"
+# Q9 : "Me gustan las armas"
+
+make_split <- function(df, response) {
+  idx <- createDataPartition(df[[response]], p = .8, list = FALSE)
+  list(train = df[idx,], test = df[-idx,])
+}
+
+clean_split <- function(data, var_name) {
+  split_list <- make_split(data, var_name)
+  split_list %<>% 
+    map(~ .x %>% 
+          filter(!is.na(.data[[var_name]]))
+    )
+  split_list
+}
+split_Q12 <- clean_split(datos, "Q12")
+split_Q9  <- clean_split(datos, "Q9")
+
+# Ejercicio 5
+
+modelo_ord_Q12 <- polr(Q12 ~ age, data = split_Q12$train, Hess = TRUE)
+modelo_ord_Q9  <- polr(Q9  ~ age, data = split_Q9$train,  Hess = TRUE)
+
+# Ejercicio 6
+new_person <- tibble(age = 25)
+probs_25 <- predict(modelo_ord_Q9, new_person, type = "probs") |> as.numeric()
+prob_at_least_agree <- sum(probs_25[4:5])  # categorías 4 y 5
+cat("P(Q9 ≥ 4 | edad = 25) =", round(prob_at_least_agree, 3), "\n")
+
+# Ejercicio 7
+loss_L <- function(y_true, y_pred_int) {
+  mean(abs(as.numeric(y_true) - as.numeric(y_pred_int)))
+}
+
+pred_ord_Q12 <- predict(modelo_ord_Q12, newdata = split_Q12$test)
+pred_ord_Q9  <- predict(modelo_ord_Q9,  newdata = split_Q9$test)
+
+loss_ord_Q12 <- loss_L(split_Q12$test$Q12, pred_ord_Q12)
+loss_ord_Q9  <- loss_L(split_Q9$test$Q9,  pred_ord_Q9)
+
+# Ejercicio 8
+
+auto_lin <- function(split, var) {
+  
+  train <- split$train %>% 
+    filter(!is.na(.data[[var]])) %>%
+    mutate(response = as.numeric(.data[[var]]))
+  
+  test  <- split$test %>% 
+    filter(!is.na(.data[[var]]))
+  
+  model <- lm(response ~ age, data = train)
+  
+  pred <- predict(model, newdata = test) |>
+    round() |>
+    pmin(5) |> 
+    pmax(1)
+  
+  list(model = model, pred = pred, test = test) 
+}
+
+lin_Q12 <- auto_lin(split_Q12, "Q12")
+lin_Q9  <- auto_lin(split_Q9,  "Q9")
+
+loss_lin_Q12 <- loss_L(split_Q12$test$Q12, lin_Q12$pred)
+loss_lin_Q9  <- loss_L(split_Q9$test$Q9,  lin_Q9$pred)
+
+# Ejercicio 9
+
+plot_preds <- function(test_df, resp, pred_lin, pred_ord) {
+  test_df |> 
+    mutate(real = as.numeric(.data[[resp]]),
+           lin  = pred_lin,
+           ord  = as.numeric(pred_ord)) |> 
+    pivot_longer(c(real, lin, ord), names_to = "tipo", values_to = "respuesta") |> 
+    ggplot(aes(x = age, y = respuesta, colour = tipo)) +
+    geom_jitter(width = .3, height = .1, alpha = .6, size = 1) +
+    scale_colour_manual(values = c(real = "black", lin = "red", ord = "blue")) +
+    labs(title = sprintf("%s: Observado vs Predicho", resp),
+         y = "Respuesta (1‑5)", colour = "Tipo")
+}
+
+print(plot_preds(split_Q12$test, "Q12", lin_Q12$pred, pred_ord_Q12))
+print(plot_preds(split_Q9$test,  "Q9",  lin_Q9$pred,  pred_ord_Q9))
+
+metricas <- tibble(Modelo = rep(c("Lineal", "Ordinal"), each = 2),
+                   Pregunta = rep(c("Q12", "Q9"), times = 2),
+                   Loss = c(loss_lin_Q12, loss_lin_Q9,
+                            loss_ord_Q12, loss_ord_Q9))
+print(metricas)
+
+# Ejercicio 10
+
+prueba_fast <- stan_polr(
+  Q9 ~ age,
+  data            = split_Q9$train,
+  prior           = R2(location = 0.5, what = "mean"),
+  chains          = 4,
+  iter            = 250,
+  seed            = 123,
+  refresh         = 0 
+)
+print(prueba_fast)
+
+prior_sds <- c(0.5, 2, 10)
+modelos_ordinales <- vector("list", length(prior_sds))
+names(modelos_ordinales) <- paste0("beta_sd_", prior_sds)
+
+# 3) Ajustar stan_polr en un bucle
+for (i in seq_along(prior_sds)) {
+  sd_beta <- prior_sds[i]
+  etiqueta <- names(modelos_ordinales)[i]
+  cat("\n>>> Ajustando modelo con prior = N(0,", sd_beta, ") para β …\n")
+  
+  # Ajuste sin suppress de mensajes, para que muestre errores si los hay
+  modelos_ordinales[[i]] <- stan_polr(
+    formula         = Q9 ~ age,
+    data            = split_Q9$train,
+    prior           = normal(location = 0, scale = sd_beta, autoscale = FALSE),
+    chains          = 2,
+    iter            = 2000,
+    seed            = 123
+  )
+  
+  # Confirmar que el objeto no es NULL y mostrar un resumen breve
+  if (is.null(modelos_ordinales[[i]])) {
+    cat("—> El modelo '", etiqueta, "' quedó como NULL.\n", sep = "")
+  } else {
+    cat("✔ Modelo '", etiqueta, "' ajustado correctamente.\n", sep = "")
+    cat("  • Fórmula: ", deparse(modelos_ordinales[[i]]@call$formula), "\n", sep = "")
+    rhats <- rhat(modelos_ordinales[[i]])
+    cat("  • Primeros rhat (β[age] y thresholds):\n")
+    print(rhats[c("age", grep("^theta", names(rhats), value = TRUE))])
+  }
+}
+
+
+# --- 3. Extraer muestras posteriores de β[age] ------------------------
+posterior_draws <- map_dfr(
+  modelos_ordinales,
+  function(mod) {
+    as.data.frame(as.matrix(mod, pars = "age")) %>%
+      rename(beta_age = age)
+  },
+  .id = "prior_label"
+)
+
+# --- 4. Graficar densidades posteriores --------------------------------
+p1 <- ggplot(posterior_draws, aes(x = beta_age, color = prior_label, fill = prior_label)) +
+  geom_density(alpha = 0.3, size = 1) +
+  scale_color_brewer(palette = "Dark2", name = "Prior en β") +
+  scale_fill_brewer(palette = "Dark2", name = "Prior en β") +
+  labs(
+    title    = "Densidades posteriores de β[age] comparando priors",
+    subtitle = "Cada curva = posterior de stan_polr(Q9 ~ age) con distinto prior",
+    x        = expression(beta[age]),
+    y        = "Densidad posterior"
+  ) +
+  theme_minimal(base_size = 14)
+
+print(p1)
+
+# --- 5. (Opcional) Superponer las densidades del prior teórico ---------
+prior_density_df <- map_dfr(
+  prior_sds,
+  function(sd_beta) {
+    tibble(
+      prior_label = paste0("beta_sd_", sd_beta),
+      x           = seq(-5*sd_beta, 5*sd_beta, length.out = 500)
+    ) %>%
+      mutate(dens_prior = dnorm(x, mean = 0, sd = sd_beta))
+  }
+)
+
+p2 <- ggplot() +
+  # Posterior
+  geom_density(
+    data = posterior_draws,
+    aes(x = beta_age, color = prior_label, fill = prior_label),
+    alpha = 0.3, size = 1
+  ) +
+  # Densidad del prior (línea discontinua)
+  geom_line(
+    data = prior_density_df,
+    aes(x = x, y = dens_prior * 0.5,   # ajustar escala si se desea
+        linetype = "Prior teórico", color = prior_label),
+    size = 1
+  ) +
+  scale_color_brewer(palette = "Dark2", name = "Prior en β") +
+  scale_fill_brewer(palette = "Dark2", name = "Prior en β") +
+  scale_linetype_manual(name = "", values = c("Prior teórico" = "dashed")) +
+  labs(
+    title = "Comparación: priors (línea) vs. posteriors (área)",
+    x     = expression(beta[age]),
+    y     = "Densidad"
+  ) +
+  theme_minimal(base_size = 14)
+
+print(p2)
+
+# ── 11. (Opcional) Modelo bayesiano puro en Stan. Se omite por tiempo; ver informe si se decide implementarlo.
+
+
+
+
+
+
+
+
+# ─── FIN DEL SCRIPT ───────────────────────────────────────────────────────────
+
+# Pruebas Gian.
+# Logre mejorar a 1.2, es decir que le erra mucho menos balanceando las clases de respuesta. Esto mejora
+# Frente a regresion lineal pero porque predice todo 3 en vez de 1. Y minimiza la metrica porque esta en el 
+# medio del rango de valores.
+
+datos %>% 
+  filter(!is.na(Q9)) %>% 
+  count(Q9) %>%                             # calcula frecuencia por categoría
+  mutate(prop = n / sum(n)) %>%             # proporción
+  ggplot(aes(x = Q9, y = prop)) +
+  geom_col(fill = "#1f78b4") +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(title = "Distribución relativa de Q9",
+       x = "Respuesta (1–5)",
+       y = "Proporción") +
+  theme_minimal(base_size = 14)
+
+# 1. Eliminar filas con NA en Q9 y calcular el conteo mínimo por nivel
+counts <- datos %>%
+  filter(!is.na(Q9)) %>%
+  count(Q9)
+
+min_count <- min(counts$n)
+
+# 2. Crear un dataset balanceado submuestreando cada nivel a 'min_count'
+q19_balanced <- datos %>%
+  filter(!is.na(Q9)) %>%
+  group_by(Q9) %>%
+  slice_sample(n = min_count, replace = FALSE) %>%
+  ungroup()
+
+# 3. Hacer el split train/test sobre el dataset balanceado
+make_split <- function(df, response) {
+  idx <- createDataPartition(df[[response]], p = 0.8, list = FALSE)
+  list(train = df[idx, ], test = df[-idx, ])
+}
+
+q19_split_balanced <- make_split(q19_balanced, "Q9")
+
+# 4. Ajustar regresión ordinal (polr) usando solo 'age' como predictor
+mod_ord_q9_bal <- polr(
+  formula = Q9 ~ age,
+  data    = q19_split_balanced$train,
+  Hess    = TRUE
+)
+
+# 5. Ver resumen del modelo
+summary(mod_ord_q9_bal)
+
+# 6. (Opcional) Predecir sobre el set de prueba balanceado y redondear
+probs_bal <- predict(mod_ord_q9_bal, newdata = q19_split_balanced$test, type = "probs")
+# calcular valor esperado y luego redondear (evita quedar siempre en la clase modal)
+ev_bal  <- as.vector(probs_bal %*% (1:5))
+pred_bal <- round(ev_bal) %>% pmin(5) %>% pmax(1)
+
+# 7. (Opcional) Calcular pérdida absoluta media
+loss_L <- function(y, y_pred) {
+  valid <- !is.na(y)
+  mean(abs(y[valid] - y_pred[valid]))
+}
+
+test_num_q9_bal <- as.numeric(q19_split_balanced$test$Q9)
+loss_bal <- loss_L(test_num_q9_bal, pred_bal)
+cat("Loss (MAE) en data balanceada Q9:", loss_bal, "\n")
+print(plot_preds(q19_split_balanced$test,  "Q9",  pred_bal,  pred_bal))
