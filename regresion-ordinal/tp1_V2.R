@@ -42,20 +42,23 @@ split_Q12$train <- split_Q12$train %>%
 split_Q12$test  <- split_Q12$test  %>% 
   filter(!is.na(Q12))
 
-split_Q9  <- make_split(datos, "Q9")
-
-split_Q9$train <- split_Q9$train %>% 
-  filter(!is.na(Q9))
-
-split_Q9$test  <- split_Q9$test  %>% 
-  filter(!is.na(Q9))
-
 # Ejercicio 5
 
 modelo_ord_Q12 <- polr(Q12 ~ age, data = split_Q12$train, Hess = TRUE)
-modelo_ord_Q9  <- polr(Q9  ~ age, data = split_Q9$train,  Hess = TRUE)
+cat("Coeficiente: ", modelo_ord_Q12$coefficients)
+cat("Intercepts: ", modelo_ord_Q12$zeta)
 
 # Ejercicio 6
+split_Q9  <- make_split(datos, "Q9")
+split_Q9$train <- split_Q9$train %>% 
+  filter(!is.na(Q9))
+split_Q9$test  <- split_Q9$test  %>% 
+  filter(!is.na(Q9))
+
+modelo_ord_Q9  <- polr(Q9  ~ age, data = split_Q9$train,  Hess = TRUE)
+cat("Coeficiente: ", modelo_ord_Q9$coefficients)
+cat("Intercepts: ", modelo_ord_Q9$zeta)
+
 new_person <- tibble(age = 25)
 probs_25 <- predict(modelo_ord_Q9, new_person, type = "probs") |> as.numeric()
 prob_at_least_agree <- sum(probs_25[4:5])  # categorías 4 y 5
@@ -129,107 +132,54 @@ prueba_fast <- stan_polr(
   Q9 ~ age,
   data            = split_Q9$train,
   prior           = R2(location = 0.5, what = "mean"),
-  chains          = 2,
-  iter            = 100,
+  chains          = 3,
+  iter            = 500,
   seed            = 123
 )
 print(prueba_fast)
 
-prior_sds <- c(0.5, 2, 10)
-modelos_ordinales <- vector("list", length(prior_sds))
-names(modelos_ordinales) <- paste0("beta_sd_", prior_sds)
+# Ejercicio
 
-# 3) Ajustar stan_polr en un bucle
-for (i in seq_along(prior_sds)) {
-  sd_beta <- prior_sds[i]
-  etiqueta <- names(modelos_ordinales)[i]
-  cat("\n>>> Ajustando modelo con prior = N(0,", sd_beta, ") para β …\n")
-  
-  # Ajuste sin suppress de mensajes, para que muestre errores si los hay
-  modelos_ordinales[[i]] <- stan_polr(
-    formula         = Q9 ~ age,
-    data            = split_Q9$train,
-    prior           = normal(location = 0, scale = sd_beta, autoscale = FALSE),
-    chains          = 2,
-    iter            = 2000,
-    seed            = 123
+r2_targets <- c(0.05, 0.30, 0.80)
+
+fits <- map(r2_targets, ~ stan_polr(
+  formula         = Q9 ~ age,
+  data            = split_Q9$train,
+  prior           = R2(location = .x, what = "mean"),  
+  chains          = 3,
+  iter            = 150,
+  seed            = 123,
+))
+names(fits) <- paste0("R2_", r2_targets)
+
+post_beta <- imap_dfr(fits, function(fit, tag) {
+  as_draws_df(fit) %>%          # convierte a draws_df (tibble con cadenas, iteraciones y parámetros)
+    as_tibble() %>%
+    transmute(
+      prior = tag,              # “R2_0.05”, “R2_0.3”, …
+      beta  = age             # el nombre interno de la variable de pendiente es “b_age”
+    )
+})
+
+# 4) Gráfico de densidades
+ggplot(post_beta, aes(x = beta, colour = prior, fill = prior)) +
+  geom_density(alpha = .25, adjust = 1.2) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  labs(title = "Posterior de β bajo tres priors R2 distintas",
+       subtitle = "Respuesta Q9 ~ edad · Regresión ordinal bayesiana (stan_polr)",
+       x = expression(beta), y = "Densidad") +
+  theme_minimal(base_size = 13)
+
+# 5) Resumen estadístico para el informe
+posterior_summary <- post_beta %>%
+  group_by(prior) %>%
+  summarise(
+    media   = mean(beta),
+    mediana = median(beta),
+    sd      = sd(beta),
+    .groups = "drop"
   )
-  
-  # Confirmar que el objeto no es NULL y mostrar un resumen breve
-  if (is.null(modelos_ordinales[[i]])) {
-    cat("—> El modelo '", etiqueta, "' quedó como NULL.\n", sep = "")
-  } else {
-    cat("✔ Modelo '", etiqueta, "' ajustado correctamente.\n", sep = "")
-    cat("  • Fórmula: ", deparse(modelos_ordinales[[i]]@call$formula), "\n", sep = "")
-    rhats <- rhat(modelos_ordinales[[i]])
-    cat("  • Primeros rhat (β[age] y thresholds):\n")
-    print(rhats[c("age", grep("^theta", names(rhats), value = TRUE))])
-  }
-}
-
-
-# --- 3. Extraer muestras posteriores de β[age] ------------------------
-posterior_draws <- map_dfr(
-  modelos_ordinales,
-  function(mod) {
-    as.data.frame(as.matrix(mod, pars = "age")) %>%
-      rename(beta_age = age)
-  },
-  .id = "prior_label"
-)
-
-# --- 4. Graficar densidades posteriores --------------------------------
-p1 <- ggplot(posterior_draws, aes(x = beta_age, color = prior_label, fill = prior_label)) +
-  geom_density(alpha = 0.3, size = 1) +
-  scale_color_brewer(palette = "Dark2", name = "Prior en β") +
-  scale_fill_brewer(palette = "Dark2", name = "Prior en β") +
-  labs(
-    title    = "Densidades posteriores de β[age] comparando priors",
-    subtitle = "Cada curva = posterior de stan_polr(Q9 ~ age) con distinto prior",
-    x        = expression(beta[age]),
-    y        = "Densidad posterior"
-  ) +
-  theme_minimal(base_size = 14)
-
-print(p1)
-
-# --- 5. (Opcional) Superponer las densidades del prior teórico ---------
-prior_density_df <- map_dfr(
-  prior_sds,
-  function(sd_beta) {
-    tibble(
-      prior_label = paste0("beta_sd_", sd_beta),
-      x           = seq(-5*sd_beta, 5*sd_beta, length.out = 500)
-    ) %>%
-      mutate(dens_prior = dnorm(x, mean = 0, sd = sd_beta))
-  }
-)
-
-p2 <- ggplot() +
-  # Posterior
-  geom_density(
-    data = posterior_draws,
-    aes(x = beta_age, color = prior_label, fill = prior_label),
-    alpha = 0.3, size = 1
-  ) +
-  # Densidad del prior (línea discontinua)
-  geom_line(
-    data = prior_density_df,
-    aes(x = x, y = dens_prior * 0.5,   # ajustar escala si se desea
-        linetype = "Prior teórico", color = prior_label),
-    size = 1
-  ) +
-  scale_color_brewer(palette = "Dark2", name = "Prior en β") +
-  scale_fill_brewer(palette = "Dark2", name = "Prior en β") +
-  scale_linetype_manual(name = "", values = c("Prior teórico" = "dashed")) +
-  labs(
-    title = "Comparación: priors (línea) vs. posteriors (área)",
-    x     = expression(beta[age]),
-    y     = "Densidad"
-  ) +
-  theme_minimal(base_size = 14)
-
-print(p2)
+print(posterior_summary)
 
 # ── 11. (Opcional) Modelo bayesiano puro en Stan. Se omite por tiempo; ver informe si se decide implementarlo.
 
