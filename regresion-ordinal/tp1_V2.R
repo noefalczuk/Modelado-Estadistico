@@ -35,16 +35,20 @@ make_split <- function(df, response) {
   list(train = df[idx,], test = df[-idx,])
 }
 
-clean_split <- function(data, var_name) {
-  split_list <- make_split(data, var_name)
-  split_list %<>% 
-    map(~ .x %>% 
-          filter(!is.na(.data[[var_name]]))
-    )
-  split_list
-}
-split_Q12 <- clean_split(datos, "Q12")
-split_Q9  <- clean_split(datos, "Q9")
+split_Q12 <- make_split(datos, "Q12")
+split_Q12$train <- split_Q12$train %>% 
+  filter(!is.na(Q12))
+
+split_Q12$test  <- split_Q12$test  %>% 
+  filter(!is.na(Q12))
+
+split_Q9  <- make_split(datos, "Q9")
+
+split_Q9$train <- split_Q9$train %>% 
+  filter(!is.na(Q9))
+
+split_Q9$test  <- split_Q9$test  %>% 
+  filter(!is.na(Q9))
 
 # Ejercicio 5
 
@@ -125,10 +129,9 @@ prueba_fast <- stan_polr(
   Q9 ~ age,
   data            = split_Q9$train,
   prior           = R2(location = 0.5, what = "mean"),
-  chains          = 4,
-  iter            = 250,
-  seed            = 123,
-  refresh         = 0 
+  chains          = 2,
+  iter            = 100,
+  seed            = 123
 )
 print(prueba_fast)
 
