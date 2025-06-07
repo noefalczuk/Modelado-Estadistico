@@ -187,51 +187,52 @@ ggplot(post_beta, aes(x = beta, colour = prior, fill = prior)) +
        x = expression(beta), y = "Densidad") +
   theme_minimal(base_size = 13)
 
-# 5) Resumen estadístico para el informe
-posterior_summary <- post_beta %>%
-  group_by(prior) %>%
-  summarise(
-    media   = mean(beta),
-    mediana = median(beta),
-    sd      = sd(beta),
-    .groups = "drop"
-  )
-print(posterior_summary)
+# # 5) Resumen estadístico para el informe
+# posterior_summary <- post_beta %>%
+#   group_by(prior) %>%
+#   summarise(
+#     media   = mean(beta),
+#     mediana = median(beta),
+#     sd      = sd(beta),
+#     .groups = "drop"
+#   )
+# print(posterior_summary)
+# 
+# # ── 11. (Opcional) Modelo bayesiano puro en Stan. Se omite por tiempo; ver informe si se decide implementarlo.
+# 
 
-# ── 11. (Opcional) Modelo bayesiano puro en Stan. Se omite por tiempo; ver informe si se decide implementarlo.
 
-
-> post_beta_code_1
-# A tibble: 200 × 1
-age
-<dbl>
-  1 -0.00769
-2 -0.00755
-3 -0.00765
-4 -0.00701
-5 -0.00673
-6 -0.00831
-7 -0.00801
-8 -0.00714
-9 -0.00715
-10 -0.00798
-# ℹ 190 more rows
-# ℹ Use `print(n = ...)` to see more rows
-> post_beta_code_2
-# A tibble: 200 × 1
-age
-<dbl>
-  1 -0.00770
-2 -0.00755
-3 -0.00765
-4 -0.00701
-5 -0.00673
-6 -0.00831
-7 -0.00801
-8 -0.00714
-9 -0.00715
-10 -0.00798
-# ℹ 190 more rows
+# > post_beta_code_1
+# # A tibble: 200 × 1
+# age
+# <dbl>
+#   1 -0.00769
+# 2 -0.00755
+# 3 -0.00765
+# 4 -0.00701
+# 5 -0.00673
+# 6 -0.00831
+# 7 -0.00801
+# 8 -0.00714
+# 9 -0.00715
+# 10 -0.00798
+# # ℹ 190 more rows
+# # ℹ Use `print(n = ...)` to see more rows
+# > post_beta_code_2
+# # A tibble: 200 × 1
+# age
+# <dbl>
+#   1 -0.00770
+# 2 -0.00755
+# 3 -0.00765
+# 4 -0.00701
+# 5 -0.00673
+# 6 -0.00831
+# 7 -0.00801
+# 8 -0.00714
+# 9 -0.00715
+# 10 -0.00798
+# # ℹ 190 more rows
 
 
 
