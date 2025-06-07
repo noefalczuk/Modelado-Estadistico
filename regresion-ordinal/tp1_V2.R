@@ -146,10 +146,26 @@ fits <- map(r2_targets, ~ stan_polr(
   formula         = Q9 ~ age,
   data            = split_Q9$train,
   prior           = R2(location = .x, what = "mean"),  
-  chains          = 3,
-  iter            = 150,
+  chains          = 2,
+  iter            = 200,
   seed            = 123,
 ))
+code1 <- stan_polr(
+  formula         = Q9 ~ age,
+  data            = split_Q9$train,
+  prior           = R2(location = 0.1, what = "mean"),  
+  chains          = 2,
+  iter            = 200,
+  seed            = 123,
+)
+code2 <- stan_polr(
+  formula         = Q9 ~ age,
+  data            = split_Q9$train,
+  prior           = R2(location = 0.5, what = "mean"),  
+  chains          = 2,
+  iter            = 200,
+  seed            = 123,
+)
 names(fits) <- paste0("R2_", r2_targets)
 
 post_beta <- imap_dfr(fits, function(fit, tag) {
@@ -160,7 +176,8 @@ post_beta <- imap_dfr(fits, function(fit, tag) {
       beta  = age             # el nombre interno de la variable de pendiente es “b_age”
     )
 })
-
+post_beta_code_1 <- as_draws_df(code1) %>% as_tibble() %>% dplyr::select(age)
+post_beta_code_2 <- as_draws_df(code2) %>% as_tibble() %>% dplyr::select(age)
 # 4) Gráfico de densidades
 ggplot(post_beta, aes(x = beta, colour = prior, fill = prior)) +
   geom_density(alpha = .25, adjust = 1.2) +
@@ -184,7 +201,37 @@ print(posterior_summary)
 # ── 11. (Opcional) Modelo bayesiano puro en Stan. Se omite por tiempo; ver informe si se decide implementarlo.
 
 
-
+> post_beta_code_1
+# A tibble: 200 × 1
+age
+<dbl>
+  1 -0.00769
+2 -0.00755
+3 -0.00765
+4 -0.00701
+5 -0.00673
+6 -0.00831
+7 -0.00801
+8 -0.00714
+9 -0.00715
+10 -0.00798
+# ℹ 190 more rows
+# ℹ Use `print(n = ...)` to see more rows
+> post_beta_code_2
+# A tibble: 200 × 1
+age
+<dbl>
+  1 -0.00770
+2 -0.00755
+3 -0.00765
+4 -0.00701
+5 -0.00673
+6 -0.00831
+7 -0.00801
+8 -0.00714
+9 -0.00715
+10 -0.00798
+# ℹ 190 more rows
 
 
 
