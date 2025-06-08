@@ -180,19 +180,6 @@ metricas <- tibble(Modelo = rep(c("Lineal", "Ordinal"), each = 2),
 print(metricas)
 
 # Ejercicio 10
-# A mayor R2 mas caso le haces la data
-
-prueba_fast <- stan_polr(
-  Q9 ~ age,
-  data            = split_Q9$train,
-  prior           = normal(location = 0.5),
-  chains          = 3,
-  iter            = 500,
-  seed            = 123
-)
-print(prueba_fast)
-
-# Ejercicio
 
 r2_targets <- c(0.001, 0.0000001, 0.2)
 
@@ -204,57 +191,33 @@ fits <- map(r2_targets, ~ stan_polr(
   iter            = 100,
   seed            = 123,
 ))
-# code1 <- stan_polr(
-#   formula         = Q9 ~ age,
-#   data            = split_Q9$train,
-#   prior           = R2(location = 0.0001, what = "mean"),  
-#   chains          = 2,
-#   iter            = 200,
-#   seed            = 123,
-# )
+
 names(fits) <- paste0("R2_", r2_targets)
 post_beta <- imap_dfr(fits, function(fit, tag) {
-  as_draws_df(fit) %>%          # convierte a draws_df (tibble con cadenas, iteraciones y parámetros)
+  as_draws_df(fit) %>%         
     as_tibble() %>%
     transmute(
-      prior = tag,              # “R2_0.05”, “R2_0.3”, …
-      beta  = age             # el nombre interno de la variable de pendiente es “b_age”
+      prior = tag,
+      beta  = age 
     )
 })
-# post_beta_code_1 <- as_draws_df(code1) %>% as_tibble() %>% dplyr::select(age)
-# post_beta_code_2 <- as_draws_df(code2) %>% as_tibble() %>% dplyr::select(age)
-# 4) Gráfico de densidades
+
 ggplot(post_beta, aes(x = beta, colour = prior, fill = prior)) +
   geom_density(alpha = .25, adjust = 1.2) +
   geom_vline(xintercept = 0, linetype = "dashed") +
-  labs(title = "Posterior de β bajo tres priors R2 distintas",
+  labs(title = "Posterior de Beta bajo tres priors R2 distintas",
        subtitle = "Respuesta Q9 ~ edad · Regresión ordinal bayesiana (stan_polr)",
        x = expression(beta), y = "Densidad") +
   theme_minimal(base_size = 13)
 
-# # 5) Resumen estadístico para el informe
-# posterior_summary <- post_beta %>%
-#   group_by(prior) %>%
-#   summarise(
-#     media   = mean(beta),
-#     mediana = median(beta),
-#     sd      = sd(beta),
-#     .groups = "drop"
-#   )
-# print(posterior_summary)
-# 
-# # ── 11. (Opcional) Modelo bayesiano puro en Stan. Se omite por tiempo; ver informe si se decide implementarlo.
+# 11. (Opcional) Modelo bayesiano puro en Stan. Se omite por tiempo; ver informe si se decide implementarlo.
 
-# Cargar paquetes necesarios
 library(tidyverse)
 library(rstan)
 library(bayesplot)
-
-# Opciones para que Stan use todos los núcleos disponibles
 options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = TRUE)
 
-# Código del modelo ordinal en Stan
 stan_code <- "
 data {
   int<lower=1> N;
@@ -277,7 +240,6 @@ model {
 }
 "
 
-# Preparar los datos para Stan
 train_clean <- split_Q12$train %>% 
   filter(!is.na(Q9), !is.na(age))
 
@@ -290,118 +252,7 @@ stan_data <- list(
   X = as.matrix(train_clean$age)
 )
 
-# Compilar y ajustar el modelo
 modelo_ordinal <- stan_model(model_code = stan_code)
 fit <- sampling(modelo_ordinal, data = stan_data, iter = 2000, chains = 4, seed = 123)
-
-# Mostrar resumen de los parámetros
 print(fit, pars = c("beta", "c"), probs = c(0.025, 0.5, 0.975))
-
-# Trazas para chequeo de convergencia
 mcmc_trace(as.array(fit), pars = c("beta", "c"))
-
-
-
-# > post_beta_code_1
-# # A tibble: 200 × 1
-# age
-# <dbl>
-#   1 -0.00769
-# 2 -0.00755
-# 3 -0.00765
-# 4 -0.00701
-# 5 -0.00673
-# 6 -0.00831
-# 7 -0.00801
-# 8 -0.00714
-# 9 -0.00715
-# 10 -0.00798
-# # ℹ 190 more rows
-# # ℹ Use `print(n = ...)` to see more rows
-# > post_beta_code_2
-# # A tibble: 200 × 1
-# age
-# <dbl>
-#   1 -0.00770
-# 2 -0.00755
-# 3 -0.00765
-# 4 -0.00701
-# 5 -0.00673
-# 6 -0.00831
-# 7 -0.00801
-# 8 -0.00714
-# 9 -0.00715
-# 10 -0.00798
-# # ℹ 190 more rows
-
-
-
-
-
-# ─── FIN DEL SCRIPT ───────────────────────────────────────────────────────────
-
-# Pruebas Gian.
-# Logre mejorar a 1.2, es decir que le erra mucho menos balanceando las clases de respuesta. Esto mejora
-# Frente a regresion lineal pero porque predice todo 3 en vez de 1. Y minimiza la metrica porque esta en el 
-# medio del rango de valores.
-
-datos %>% 
-  filter(!is.na(Q9)) %>% 
-  count(Q9) %>%                             # calcula frecuencia por categoría
-  mutate(prop = n / sum(n)) %>%             # proporción
-  ggplot(aes(x = Q9, y = prop)) +
-  geom_col(fill = "#1f78b4") +
-  scale_y_continuous(labels = scales::percent_format()) +
-  labs(title = "Distribución relativa de Q9",
-       x = "Respuesta (1–5)",
-       y = "Proporción") +
-  theme_minimal(base_size = 14)
-
-# 1. Eliminar filas con NA en Q9 y calcular el conteo mínimo por nivel
-counts <- datos %>%
-  filter(!is.na(Q9)) %>%
-  count(Q9)
-
-min_count <- min(counts$n)
-
-# 2. Crear un dataset balanceado submuestreando cada nivel a 'min_count'
-q19_balanced <- datos %>%
-  filter(!is.na(Q9)) %>%
-  group_by(Q9) %>%
-  slice_sample(n = min_count, replace = FALSE) %>%
-  ungroup()
-
-# 3. Hacer el split train/test sobre el dataset balanceado
-make_split <- function(df, response) {
-  idx <- createDataPartition(df[[response]], p = 0.8, list = FALSE)
-  list(train = df[idx, ], test = df[-idx, ])
-}
-
-q19_split_balanced <- make_split(q19_balanced, "Q9")
-
-# 4. Ajustar regresión ordinal (polr) usando solo 'age' como predictor
-mod_ord_q9_bal <- polr(
-  formula = Q9 ~ age,
-  data    = q19_split_balanced$train,
-  Hess    = TRUE
-)
-
-# 5. Ver resumen del modelo
-summary(mod_ord_q9_bal)
-
-# 6. (Opcional) Predecir sobre el set de prueba balanceado y redondear
-probs_bal <- predict(mod_ord_q9_bal, newdata = q19_split_balanced$test, type = "probs")
-# calcular valor esperado y luego redondear (evita quedar siempre en la clase modal)
-ev_bal  <- as.vector(probs_bal %*% (1:5))
-pred_bal <- round(ev_bal) %>% pmin(5) %>% pmax(1)
-
-# 7. (Opcional) Calcular pérdida absoluta media
-loss_L <- function(y, y_pred) {
-  valid <- !is.na(y)
-  mean(abs(y[valid] - y_pred[valid]))
-}
-
-test_num_q9_bal <- as.numeric(q19_split_balanced$test$Q9)
-loss_bal <- loss_L(test_num_q9_bal, pred_bal)
-cat("Loss (MAE) en data balanceada Q9:", loss_bal, "\n")
-print(plot_preds(q19_split_balanced$test,  "Q9",  pred_bal,  pred_bal))
