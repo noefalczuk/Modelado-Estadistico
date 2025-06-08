@@ -18,25 +18,65 @@ datos[cols_ordenadas] <- lapply(datos[cols_ordenadas], function(x) {
 })
 
 datos$age <- as.numeric(datos$age)
+table(datos$age)
 hist(datos$age)
 max(datos$age)
 sum(is.na(datos$age))
 lenoriginal <- length(datos$age)
-datos <- datos[!is.na(datos$age) & datos$age <= 130, ]
+datos <- datos[!is.na(datos$age) & datos$age <= 50, ]
 hist(datos$age)
 max(datos$age)
 lenupdate <- length(datos$age)
 lenoriginal - lenupdate
+
+library(dplyr)
+
+table(datos$Q12)  # valores reales presentes
+
+summary(datos$Q12)  # incluye niveles vacíos si hay
+
+# Contar cuántos hay por clase
+table(datos$Q12)
+
+# Elegir la cantidad mínima por clase (para muestreo uniforme)
+n_min <- datos %>%
+  filter(!is.na(Q12)) %>%
+  count(Q12) %>%
+  summarise(min_n = min(n)) %>%
+  pull(min_n)
+
+
+# Tomar aleatoriamente n_min observaciones por clase
+datos_balanceado <- datos %>%
+  filter(!is.na(Q12)) %>%
+  group_by(Q12) %>%
+  slice_sample(n = n_min) %>%
+  ungroup()
+
+# Verificación
+table(datos_balanceado$Q12)
+summary(datos_balanceado$Q12)
+
+
+library(ggplot2)
+
+ggplot(datos_balanceado, aes(x = age, fill = Q12)) +
+  geom_histogram(binwidth = 5, position = "dodge") +
+  labs(title = "Distribución de edad por clase",
+       x = "Edad",
+       y = "Frecuencia") +
+  theme_minimal()
+
 # Q12	I use lotion on my hands.
 
 set.seed(123)
-particion <- createDataPartition(datos$"Q12", p = 0.8, list = FALSE) #stratified 
-train_Q12 <- datos[particion, ]
-test_Q12 <- datos[-particion, ]
+particion <- createDataPartition(datos_balanceado$Q12, p = 0.8, list = FALSE) #stratified 
+train_Q12 <- datos_balanceado[particion, ]
+test_Q12 <- datos_balanceado[-particion, ]
 
-sum(is.na(train_Q12$"Q12"))
-hist(as.numeric(train_Q12$"Q12"))
-hist(as.numeric(test_Q12$"Q12"))
+sum(is.na(train_Q12$Q12))
+hist(as.numeric(train_Q12$Q12))
+hist(as.numeric(test_Q12$Q12))
 
 modelo_ord_Q12 <- MASS::polr(Q12 ~ age, data = train_Q12, Hess = TRUE)
 summary(modelo_ord_Q12)
@@ -49,7 +89,7 @@ pred_ordinal_final_Q12 <- as.numeric(pred_ordinal_Q12)
 
 
 # Q9	me gustan las armas.
-particion <- createDataPartition(datos$"Q9", p = 0.8, list = FALSE) #stratified 
+particion <- createDataPartition(datos_balanceado$"Q9", p = 0.8, list = FALSE) #stratified 
 train_Q9 <- datos[particion, ]
 test_Q9 <- datos[-particion, ]
 

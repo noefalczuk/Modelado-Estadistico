@@ -5,6 +5,8 @@ library(purrr)
 library(broom)
 library(rstanarm)
 library(bayesplot)
+library(readr)
+
 
 set.seed(123)
 datos <- read_delim("data.csv", delim = "\t")
@@ -17,6 +19,7 @@ datos <- datos |>
   mutate(across(all_of(questions_cols_names), ~ factor(.x, levels = niveles, ordered = TRUE))) |> 
   mutate(age = as.numeric(age)) |> 
   filter(!is.na(age), age <= max_age)
+
 
 # Visualización exploratoria básica
 
@@ -42,6 +45,33 @@ split_Q12$train <- split_Q12$train %>%
 split_Q12$test  <- split_Q12$test  %>% 
   filter(!is.na(Q12))
 
+datos %>%
+  ggplot(aes(x = age)) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "black") +
+  facet_wrap(~ Q12) +
+  labs(title = "Distribución de edad por clase en Q12",
+       x = "Edad",
+       y = "Frecuencia") +
+  theme_minimal()
+
+split_Q12$train %>%
+  ggplot(aes(x = age)) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "black") +
+  facet_wrap(~ Q12) +
+  labs(title = "Distribución de edad por clase en Q12 - train",
+       x = "Edad",
+       y = "Frecuencia") +
+  theme_minimal()
+
+split_Q12$test %>%
+  ggplot(aes(x = age)) +
+  geom_histogram(bins = 30, fill = "steelblue", color = "black") +
+  facet_wrap(~ Q12) +
+  labs(title = "Distribución de edad por clase en Q12 - test",
+       x = "Edad",
+       y = "Frecuencia") +
+  theme_minimal()
+
 # Ejercicio 5
 
 modelo_ord_Q12 <- polr(Q12 ~ age, data = split_Q12$train, Hess = TRUE)
@@ -63,6 +93,29 @@ new_person <- tibble(age = 25)
 probs_25 <- predict(modelo_ord_Q9, new_person, type = "probs") |> as.numeric()
 prob_at_least_agree <- sum(probs_25[4:5])  # categorías 4 y 5
 cat("P(Q9 ≥ 4 | edad = 25) =", round(prob_at_least_agree, 3), "\n")
+
+# manualmente 
+edad <- 25
+beta <- modelo_ord_Q9$coefficients[["age"]]
+B <- beta * edad
+theta <- unname(unlist(modelo_ord_Q9$zeta))
+logit <- function(z) 1 / (1 + exp(-z))
+
+# Probabilidades acumuladas
+F1 <- logit(theta[1] - B)                # P(Q9 ≤ 1) = P(Q9 = 1)
+F2 <- logit(theta[2] - B)                # P(Q9 ≤ 2)
+F3 <- logit(theta[3] - B)                # P(Q9 ≤ 3)
+F4 <- logit(theta[4] - B)                # P(Q9 ≤ 4)
+F5 <- 1                                  # P(Q9 ≤ 5)
+
+p1 <- F1
+p2 <- F2 - F1          
+p3 <- F3 - F2
+p4 <- F4 - F3
+p5 <- F5 - F4
+
+round(c(p1, p2, p3, p4, p5), 4)
+
 
 # Ejercicio 7
 loss_L <- function(y_true, y_pred_int) {
@@ -191,7 +244,62 @@ ggplot(post_beta, aes(x = beta, colour = prior, fill = prior)) +
 # print(posterior_summary)
 # 
 # # ── 11. (Opcional) Modelo bayesiano puro en Stan. Se omite por tiempo; ver informe si se decide implementarlo.
-# 
+
+# Cargar paquetes necesarios
+library(tidyverse)
+library(rstan)
+library(bayesplot)
+
+# Opciones para que Stan use todos los núcleos disponibles
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+
+# Código del modelo ordinal en Stan
+stan_code <- "
+data {
+  int<lower=1> N;
+  int<lower=2> K;
+  int<lower=1, upper=K> y[N];
+  int<lower=1> D;
+  matrix[N, D] X;
+}
+parameters {
+  vector[D] beta;
+  ordered[K-1] c;
+}
+model {
+  beta ~ normal(0, 5);
+  c ~ normal(0, 5);
+  for (n in 1:N) {
+    real eta = X[n] * beta;
+    y[n] ~ ordered_logistic(eta, c);
+  }
+}
+"
+
+# Preparar los datos para Stan
+train_clean <- split_Q12$train %>% 
+  filter(!is.na(Q9), !is.na(age))
+
+
+stan_data <- list(
+  N = nrow(train_clean),
+  K = length(unique(train_clean$Q9)),
+  y = train_clean$Q9,
+  D = 1,
+  X = as.matrix(train_clean$age)
+)
+
+# Compilar y ajustar el modelo
+modelo_ordinal <- stan_model(model_code = stan_code)
+fit <- sampling(modelo_ordinal, data = stan_data, iter = 2000, chains = 4, seed = 123)
+
+# Mostrar resumen de los parámetros
+print(fit, pars = c("beta", "c"), probs = c(0.025, 0.5, 0.975))
+
+# Trazas para chequeo de convergencia
+mcmc_trace(as.array(fit), pars = c("beta", "c"))
+
 
 
 # > post_beta_code_1
