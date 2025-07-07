@@ -1,0 +1,24 @@
+  release_year     runtime          seasons         imdb_score   
+ Min.   :1953   Min.   :  0.00   Min.   : 1.000   Min.   :1.600  
+ 1st Qu.:2015   1st Qu.: 46.00   1st Qu.: 1.000   1st Qu.:5.800  
+ Median :2018   Median : 87.00   Median : 1.000   Median :6.600  
+ Mean   :2016   Mean   : 79.75   Mean   : 1.427   Mean   :6.532  
+ 3rd Qu.:2020   3rd Qu.:106.00   3rd Qu.: 1.000   3rd Qu.:7.400  
+ Max.   :2022   Max.   :235.00   Max.   :42.000   Max.   :9.600  
+                                                                 
+   imdb_votes            Comedy           Drama       
+ Min.   :      5.0   Min.   :0.0000   Min.   :0.0000  
+ 1st Qu.:    525.2   1st Qu.:0.0000   1st Qu.:0.0000  
+ Median :   2287.0   Median :0.0000   Median :1.0000  
+ Mean   :  25023.6   Mean   :0.4117   Mean   :0.5277  
+ 3rd Qu.:  10005.0   3rd Qu.:1.0000   3rd Qu.:1.0000  
+ Max.   :2268288.0   Max.   :1.0000   Max.   :1.0000  
+ NA's   :13                                           
+     Action           Year_c       runtime_c      
+ Min.   :0.0000   Min.   : 0.0   Min.   :-78.079  
+ 1st Qu.:0.0000   1st Qu.:62.0   1st Qu.:-32.079  
+ Median :0.0000   Median :65.0   Median :  8.921  
+ Mean   :0.1972   Mean   :62.9   Mean   :  1.668  
+ 3rd Qu.:0.0000   3rd Qu.:67.0   3rd Qu.: 27.921  
+ Max.   :1.0000   Max.   :69.0   Max.   :156.921  
+                                                  
